@@ -8,6 +8,10 @@ public class ScrapingException extends Exception {
 		super(cause);
 	}
 
+	public ScrapingException(String message) {
+		super(message);
+	}
+
 	public ScrapingException(String message, Throwable cause) {
 		super(message, cause);
 	}

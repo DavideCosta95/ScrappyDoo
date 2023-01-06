@@ -22,13 +22,13 @@ public class FinancialTimesEntry {
 	@NonNull
 	private String sector;
 
-	@JsonProperty("revenue_2020")
+	@JsonProperty("revenue_2020_EU")
 	@NonNull
-	private String revenue2020;
+	private String revenue2020EU;
 
-	@JsonProperty("revenue_2017")
+	@JsonProperty("revenue_2017_EU")
 	@NonNull
-	private String revenue2017;
+	private String revenue2017EU;
 
 	@JsonProperty("employees_number_2020")
 	@NonNull
