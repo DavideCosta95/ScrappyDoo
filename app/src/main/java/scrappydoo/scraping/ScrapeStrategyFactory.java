@@ -5,8 +5,10 @@ import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 import scrappydoo.datasources.FetchUtils;
+import scrappydoo.datasources.mapper.CompaniesMarketCapEntry;
 import scrappydoo.datasources.mapper.DisfoldEntry;
 import scrappydoo.datasources.mapper.FinancialTimesEntry;
+import scrappydoo.datasources.mapper.ValueTodayEntry;
 import scrappydoo.exception.PageFetchException;
 
 import java.util.ArrayList;
@@ -27,6 +29,7 @@ public class ScrapeStrategyFactory {
 			try {
 				page = FetchUtils.fetchUrl(s);
 			} catch (PageFetchException e) {
+				log.error("Cannot fetch url={}", s, e);
 				return null;
 			}
 
@@ -46,14 +49,16 @@ public class ScrapeStrategyFactory {
 			}
 			return scraped;
 		});
+
 		this.strategies.put(DisfoldEntry.class, s -> {
 			Document page;
 			List<DisfoldEntry> scraped = new ArrayList<>(1000);
 			for (int i = 1; i <= 20; i++) {
-				log.info("{}", i);
+				String url = s + "?page=" + i;
 				try {
-					page = FetchUtils.fetchUrl(s + "?page=" + i);
+					page = FetchUtils.fetchUrl(url);
 				} catch (PageFetchException e) {
+					log.error("Cannot fetch url={}", url, e);
 					return null;
 				}
 				Elements rows = page.select("table > tbody > tr");
@@ -73,6 +78,65 @@ public class ScrapeStrategyFactory {
 			}
 			return scraped;
 		});
+
+		this.strategies.put(CompaniesMarketCapEntry.class, s -> {
+			Document page;
+			List<CompaniesMarketCapEntry> scraped = new ArrayList<>(8000);
+			for (int i = 1; i <= 72; i++) {
+				String url = s + "page/" + i + "/";
+				try {
+					page = FetchUtils.fetchUrl(url);
+				} catch (PageFetchException e) {
+					log.error("Cannot fetch url={}", url, e);
+					return null;
+				}
+				Elements rows = page.select(".marketcap-table > tbody > tr");
+				for (Element element : rows) {
+					Elements columns = element.select("td");
+					if (columns.size() == 1) {
+						continue;
+					}
+					String name = columns.get(1).select(".company-name").text();
+					String marketCapitalizationUSD = sanitizeCurrency(columns.get(2).text());
+					String price = sanitizeCurrency(columns.get(3).text());
+					String country = columns.get(6).text();
+					scraped.add(new CompaniesMarketCapEntry(name, marketCapitalizationUSD, price, country));
+				}
+			}
+			return scraped;
+		});
+
+		this.strategies.put(ValueTodayEntry.class, s -> {
+			Document page;
+			List<ValueTodayEntry> scraped = new ArrayList<>(11000);
+			for (int i = 0; i <= 1068; i++) {
+				log.info("{}", i);
+				String url = s + "&page=" + i;
+				try {
+					page = FetchUtils.fetchUrl(url);
+				} catch (PageFetchException e) {
+					log.error("Cannot fetch url={}", url, e);
+					return null;
+				}
+				Elements rows = page.select(".item-list > ol > li");
+				for (Element element : rows) {
+					String name = element.select("h1").text();
+					String annualRevenueUSD = sanitizeCurrency(element.select(".field--name-field-revenue-in-usd").select(".field--item").text());
+					String annualNetIncomeUSD = sanitizeCurrency(element.select(".field--name-field-net-income-in-usd").select(".field--item").text());
+					String marketCapitalization2022 = sanitizeCurrency(element.select(".field--name-field-market-value-jan072022").select(".field--item").text());
+					String employeesNumber = element.select(".field--name-field-employee-count").select(".field--item").text().replace(",", "");
+					String ceo = element.select(".field--name-field-ceo").select(".field--item").text();
+					String headquartersCountry = element.select(".field--name-field-headquarters-of-company").select(".field--item").text();
+					String wikipediaPageUrl = element.select(".field--name-field-wikipedia").select("a").attr("href");
+					String twitterPageUrl = element.select(".field--name-field-twitter").select("a").attr("href");
+					String facebookPageUrl = element.select(".field--name-field-facebook").select("a").attr("href");
+					scraped.add(new ValueTodayEntry(name, annualRevenueUSD, annualNetIncomeUSD, marketCapitalization2022,
+							employeesNumber, ceo, headquartersCountry, wikipediaPageUrl, twitterPageUrl, facebookPageUrl));
+				}
+			}
+			log.info("{}", scraped.size());
+			return scraped;
+		});
 	}
 
 	public static ScrapeStrategyFactory getInstance() {
@@ -90,7 +154,9 @@ public class ScrapeStrategyFactory {
 	private String sanitizeCurrency(String s) {
 		s = s.replace("$", "")
 				.replace("€", "")
-				.replace(" ", "");
+				.replace("USD", "")
+				.replace(" ", "")
+				.replace(",", "");
 		int exponent = 0;
 		if (s.contains("T")) {
 			exponent = 12;
@@ -102,7 +168,11 @@ public class ScrapeStrategyFactory {
 			exponent = 6;
 			s = s.substring(0, s.indexOf("M"));
 		}
-		double value = Double.parseDouble(s);
-		return String.valueOf(Math.round(value * Math.pow(10, exponent)));
+		try {
+			double value = Double.parseDouble(s);
+			return String.valueOf(Math.round(value * Math.pow(10, exponent)));
+		} catch (NumberFormatException | NullPointerException e) {
+			return "";
+		}
 	}
 }
